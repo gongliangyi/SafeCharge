@@ -242,3 +242,48 @@ fastboot flash recovery <recovery_filename>.img
 
 最后返回主菜单选择 `Reboot system now`。
 
+## 3. 修改驱动
+
+* 此处主要针对 Nexus 6，设备信息如下：
+  * Qualcomm Snapdragon 805
+  * 不修改驱动的情况下，充电电流最大是 **2A**
+* 驱动代码在 `/drivers/power/` 文件夹下
+
+### 3.1 确定充电 IC
+
+* 在 `/drivers/power/` 文件夹下有管理电池和充电的许多驱动代码，一直没有找准所以前前后后花了很多时间。
+
+#### 3.1.1 在设备树中查找
+
+可以在 `/arch/arm/boot/dts` 文件夹下查看设备树里驱动的配置，我在 `/arch/arm/boot/dts/qcom` 下搜索了驱动代码里出现的各种充电 IC 名字，发现只出现了 `smb349, smb1357, smb1359` 三个，但这只是一个大体定位的方法，并不能精准定位。
+
+#### 3.1.2
+
+在 `/sys/class/power_supply/` 下各个文件夹对应不同的文件驱动，有些驱动运行时的信息和配置可以在这里找到，如果驱动里实现了 power_supply 的电流限制应该就可以在这里进行配置（*下一步的方向？*）
+
+#### 3.1.3 查看 dmesg
+
+利用 adb 查看手机的 dmesg（若出现 `Permission denied` 可以先输入 `adb root` 切换到 root 模式），发现：
+
+```log
+smb135x-charger 0-001c: SMB135X version = smb1359 revision = rev2.1 successfully probed batt=1 dc = 0 usb = 1
+```
+
+所以最终定位到驱动 `smb135x-charger.c`。
+
+### 3.2 限制充电电流
+
+#### 3.2.1 初步尝试
+
+首先同时修改了 `static int smb135x_set_dc_chg_current(struct smb135x_chg *chip, int current_ma)` 函数，直接给 `current_ma` 赋值为 `300mA` 编译刷机后发现没什么用。
+
+#### 3.2.2 修改电流
+
+在检查了插上充电线和拔掉时的 dmesg 输出，发现有如下一句：
+
+```log
+src_detect_handler: chip->usb_present = 0 usb_present = 1
+```
+
+对应代码出现在 `static int src_detect_handler(struct smb135x_chg *chip, u8 rt_stat)` 中，于是猜测类型为 USB 充电，修改 `static int smb135x_set_usb_chg_current(struct smb135x_chg *chip, int current_ma)` 后成功控制电流。
+
