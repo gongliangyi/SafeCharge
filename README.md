@@ -287,3 +287,6 @@ src_detect_handler: chip->usb_present = 0 usb_present = 1
 
 对应代码出现在 `static int src_detect_handler(struct smb135x_chg *chip, u8 rt_stat)` 中，于是猜测类型为 USB 充电，修改 `static int smb135x_set_usb_chg_current(struct smb135x_chg *chip, int current_ma)` 后成功控制电流。
 
+### 3.3 开发控制接口
+
+在 `probe` 函数里有一些在调试模式下创建系统文件的代码，可以参照着创建一个控制电流的系统文件。
